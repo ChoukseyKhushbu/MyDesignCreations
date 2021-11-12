@@ -1,8 +1,59 @@
-import Head from 'next/head'
-import Image from 'next/image'
-import styles from '../styles/Home.module.css'
+import Head from "next/head";
+import Image from "next/image";
+import styles from "../styles/Home.module.css";
+import { useRouter } from "next/router";
+import { useEffect } from "react";
+import axios from "axios";
+import { parseCookies, setCookie, destroyCookie } from "nookies";
+
+const CLIENT_ID =
+  "80d546a81142ed877305322b8fb8df72a7aaf73a1e584e092064855b7e29d7d2";
+const CLIENT_SECRET =
+  "ea4d8987ea756e1ff64f43a7a43ca27475bb2098751db2c582d16c46da79b4e6";
 
 export default function Home() {
+  const router = useRouter();
+
+  const authorize = (e) => {
+    e.preventDefault();
+    router.push(`https://dribbble.com/oauth/authorize?client_id=${CLIENT_ID}`);
+  };
+  useEffect(() => {
+    const { code } = router.query;
+    async function getAccessToken() {
+      try {
+        console.log(router.pathname);
+        const response = await axios.post(
+          `https://dribbble.com/oauth/token?client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&code=${code}`
+        );
+        console.log(response);
+        const { access_token: accessToken } = response.data;
+        setCookie(null, "accessToken", accessToken, {
+          maxAge: 24 * 60 * 60,
+          path: "/",
+        });
+        const cookies = parseCookies();
+        console.log({ cookies });
+        // console.log(accessTokecookie);
+        const dribbbleShots = await axios.get(
+          `https://api.dribbble.com/v2/user`,
+          {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }
+        );
+        console.log({ dribbbleShots });
+      } catch (error) {
+        console.warn(error);
+      }
+    }
+    if (code) {
+      console.log(code);
+      getAccessToken();
+    }
+  }, [router]);
+
   return (
     <div className={styles.container}>
       <Head>
@@ -12,12 +63,14 @@ export default function Home() {
       </Head>
 
       <main className={styles.main}>
-        <h1 className={styles.title}>
+        <button onClick={authorize}>Integrate Dribbble</button>
+
+        {/* <h1 className={styles.title}>
           Welcome to <a href="https://nextjs.org">Next.js!</a>
         </h1>
 
         <p className={styles.description}>
-          Get started by editing{' '}
+          Get started by editing{" "}
           <code className={styles.code}>pages/index.js</code>
         </p>
 
@@ -49,7 +102,7 @@ export default function Home() {
               Instantly deploy your Next.js site to a public URL with Vercel.
             </p>
           </a>
-        </div>
+        </div> */}
       </main>
 
       <footer className={styles.footer}>
@@ -58,12 +111,12 @@ export default function Home() {
           target="_blank"
           rel="noopener noreferrer"
         >
-          Powered by{' '}
+          Powered by{" "}
           <span className={styles.logo}>
             <Image src="/vercel.svg" alt="Vercel Logo" width={72} height={16} />
           </span>
         </a>
       </footer>
     </div>
-  )
+  );
 }
