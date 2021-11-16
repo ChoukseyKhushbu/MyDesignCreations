@@ -168,6 +168,12 @@ export default function Home(props) {
             // updating state
             setDribbbleShots(shots.data);
             setIsFetchingShots(false);
+            const parsedLinks = parseLinkHeader(shots.headers.link);
+            if (!parsedLinks.next) {
+              setHasNextPage(false);
+            } else {
+              setHasNextPage(true);
+            }
           });
 
         axios
