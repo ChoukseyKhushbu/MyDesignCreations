@@ -39,7 +39,7 @@ export const getServerSideProps = async (ctx) => {
       ]);
 
       const parsedLinks = parseLinkHeader(shotsResponse.headers.link);
-      if (parsedLinks.next) {
+      if (parsedLinks && parsedLinks.next) {
         hasNextPage = true;
       } else {
         hasNextPage = false;
@@ -92,7 +92,7 @@ export default function Home(props) {
   const [dribbbleShots, setDribbbleShots] = useState(props.shots);
   const [isFetchingShots, setIsFetchingShots] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(props.isAuthorized);
-  // const [isLoading, setIsLoading] = useState(false);
+  const [isTokenLoading, setIsTokenLoading] = useState(true);
   const [page, setPage] = useState(props.initialPage || 1);
   const [perPage, setPerPage] = useState(props.perPage || 1);
   const [hasNextPage, setHasNextPage] = useState(props.hasNextPage);
@@ -117,7 +117,7 @@ export default function Home(props) {
       }
     );
     const parsedLinks = parseLinkHeader(newShots.headers.link);
-    if (!parsedLinks.next) {
+    if (!(parsedLinks && parsedLinks.next)) {
       setHasNextPage(false);
     }
     setIsFetchingShots(false);
@@ -132,26 +132,35 @@ export default function Home(props) {
     router.replace(router.pathname);
   };
 
+  const fetchToken = async (code) => {
+    setIsTokenLoading(true);
+
+    const response = await axios.post(`/api/token`, {
+      code: code,
+    });
+    const { accessToken, error } = response.data;
+    if (error) {
+      throw new Error(error);
+    }
+
+    // setting accessToken in cookie
+    setCookie(null, "accessToken", accessToken, {
+      maxAge: 24 * 60 * 60,
+      path: "/",
+    });
+
+    // updating state
+    setIsTokenLoading(false);
+    setIsAuthorized(true);
+    return accessToken;
+  };
+
   useEffect(() => {
     const { code } = router.query;
     async function getAccessToken() {
       try {
         // fetching accessToken
-        // setIsLoading(true);
-        const response = await axios.post(
-          `https://dribbble.com/oauth/token?client_id=${process.env.NEXT_PUBLIC_CLIENT_ID}&client_secret=${process.env.NEXT_PUBLIC_CLIENT_SECRET}&code=${code}`
-        );
-        const { access_token: accessToken } = response.data;
-
-        // setting accessToken in cookie
-        setCookie(null, "accessToken", accessToken, {
-          maxAge: 24 * 60 * 60,
-          path: "/",
-        });
-
-        // updating state
-        // setIsLoading(false);
-        setIsAuthorized(true);
+        const accessToken = await fetchToken(code);
 
         // fetching shots
         setIsFetchingShots(true);
@@ -169,10 +178,10 @@ export default function Home(props) {
             setDribbbleShots(shots.data);
             setIsFetchingShots(false);
             const parsedLinks = parseLinkHeader(shots.headers.link);
-            if (!parsedLinks.next) {
-              setHasNextPage(false);
-            } else {
+            if (parsedLinks && parsedLinks.next) {
               setHasNextPage(true);
+            } else {
+              setHasNextPage(false);
             }
           });
 
@@ -186,22 +195,24 @@ export default function Home(props) {
             setUserProfileURL(userProfile.data.html_url);
           });
       } catch (error) {
-        // setIsLoading(false);
+        setIsTokenLoading(false);
         setIsFetchingShots(false);
-        console.warn(error);
+        console.warn(error.message);
+      } finally {
+        router.replace(router.pathname);
       }
     }
-    if (isAuthorized) {
-      if (code) {
+    if (code) {
+      if (isAuthorized) {
         // if authorised user directly goes to url with code in query parameter
         // then removing the code from query parameter
         router.replace(router.pathname);
-      }
-    } else {
-      // if user not authorized and code coming in dribbble callbackurl
-      if (code) {
+      } else {
+        // if user not authorized and code coming in dribbble callbackurl
         getAccessToken();
       }
+    } else {
+      setIsTokenLoading(false);
     }
   }, [router]);
 
@@ -274,7 +285,7 @@ export default function Home(props) {
   const renderShowMoreButton = () => {
     return (
       <button
-        className="mx-auto py-2 px-4 border font-medium leading-1 text-center tracking-wider transition-all ease-in duration-75 outline-none focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed lg:flex items-center rounded leading-120 select-none text-sm bg-white text-primary border-secondary hover:bg-green-50"
+        className="mx-auto py-2 px-4 border font-medium text-center tracking-wider transition-all ease-in duration-75 outline-none focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center rounded select-none text-sm bg-white text-primary border-secondary hover:bg-green-50"
         onClick={loadMoreShots}
       >
         <span className="flex items-center">Show more </span>
@@ -316,6 +327,22 @@ export default function Home(props) {
     );
   };
 
+  const renderBody = () => {
+    if (isTokenLoading) {
+      return (
+        <main className="flex items-center justify-center min-h-screen">
+          <div className="bg-blue-600 p-2 m-2 w-4 h-4 rounded-full animate-bounce blue-circle"></div>
+          <div className="bg-green-600 p-2 m-2 w-4 h-4 rounded-full animate-bounce green-circle"></div>
+          <div className="bg-red-600 p-2 m-2 w-4 h-4 rounded-full animate-bounce red-circle"></div>
+        </main>
+      );
+    }
+    if (!isAuthorized) {
+      return renderIntegrateButton();
+    } else {
+      return renderShotsView();
+    }
+  };
   return (
     <div>
       <Head>
@@ -323,8 +350,7 @@ export default function Home(props) {
         <meta name="description" content="Your Dribbble Creations" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
-
-      {!isAuthorized ? renderIntegrateButton() : renderShotsView()}
+      {renderBody()}
     </div>
   );
 }
